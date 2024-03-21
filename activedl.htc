@@ -1,0 +1,90 @@
+<public:component tagName="activedl" literalContent=true>
+    <public:method name="download" />
+    
+    <public:event id="rendezvousEvent" name="onrend" />
+    <public:event id="completionEvent" name="oncomplete" />
+    
+    <public:attach event="ondocumentready" for="element" onevent="init()" />
+    <public:attach event="ondetach" for="element" onevent="terminateCore()" />
+</public:component>
+<script language="jscript">
+var g_currentURL = "";
+var g_core = null, g_corePID = 0;
+var g_services = GetObject("winmgmts:");
+
+function init() {
+    var doc = element.document;
+    var port = doc.getElementById("rendezvousPort");
+    if (!port) {
+        port = doc.createElement("object");
+        port.id = "rendezvousPort";
+        port.classid = "clsid:8856F961-340A-11D0-A96B-00C04FD705A2";
+        port.width = port.height = 1;
+        doc.body.appendChild(port);
+    }
+    
+    var signature = Math.round(Math.random() * 0xFFFFFF);
+    port.PutProperty("OmegaStripes_" + signature, establish);
+    port.RegisterAsBrowser = true;
+    
+    var processStartup = g_services.Get("Win32_ProcessStartup").SpawnInstance_();
+    processStartup.ShowWindow = 0;
+    var process = g_services.Get("Win32_Process");
+    var method = process.Methods_.Item("Create");
+    var methodParams = method.InParameters.SpawnInstance_();
+    methodParams.CommandLine = "mshta https://envoy.lol/https://javadbayat.github.io/ActiveDL/core.hta " + signature;
+    methodParams.ProcessStartupInformation = processStartup;
+    var methodResult = process.ExecMethod_("Create", methodParams);
+    var s = methodResult.ReturnValue;
+    if (s === null)
+        throw new Error("Failed to start the core process");
+    else if (s != 0)
+        throw new Error("Failed to start the core process with error code " + s);
+    else
+        g_corePID = methodResult.ProcessID;
+}
+
+function establish(core) {
+    g_core = core;
+    g_core.indicate = notifyCompletion;
+    
+    if (g_currentURL)
+        g_core.downloadFile(g_currentURL);
+    
+    var e = document.createEventObject();
+    e.corePID = g_corePID;
+    rendezvousEvent.fire(e);
+}
+
+function download(url) {
+    if (g_currentURL)
+        throw new Error("A download is already in progress");
+    
+    if (g_core)
+        g_core.downloadFile(url);
+    
+    g_currentURL = url;
+}
+
+function notifyCompletion(filePath, fileContent) {
+    g_currentURL = "";
+    
+    var e = document.createEventObject();
+    e.filePath = filePath;
+    e.fileContent = fileContent;
+    completionEvent.fire(e);
+}
+
+function terminateCore() {
+    if (g_core)
+        g_core.close();
+    else {
+        var query = "SELECT * FROM Win32_Process WHERE ProcessID = " + g_corePID;
+        var col = g_services.ExecQuery(query);
+        if (col.Count) {
+            var process = (new Enumerator(col)).item();
+            process.Terminate(0);
+        }
+    }
+}
+</script>
