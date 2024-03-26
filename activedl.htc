@@ -4,7 +4,7 @@
     <public:event id="initializationEvent" name="oninitialize" />
     <public:event id="completionEvent" name="oncomplete" />
 
-    <public:attach event="oncontentready" for="element" onevent="init()" />
+    <public:attach event="ondocumentready" for="element" onevent="init()" />
 </public:component>
 <script language="jscript">
 String.prototype.startsWith = new Function("str", "return(this.substr(0,str.length) === str);");
@@ -23,13 +23,20 @@ var g_currentURL = "";
 var g_downloader = null;
 
 function init() {
-    document.all.core.onload = function() {
-        g_downloader = document.all.core.contentWindow.document.all.tags("IE:Download")[0];
-
+    var doc = element.document;
+    var core = doc.createElement("iframe");
+    core.src = "https://envoy.lol/https://javadbayat.github.io/ActiveDL/core.htm";
+    core.style.width = core.style.height = 1;
+    doc.body.appendChild(core);
+    
+    core.onload = function() {
+        g_downloader = this.contentWindow.document.all.tags("Download")[0];
+        
         if (g_currentURL)
             g_downloader.startDownload("https://envoy.lol/" + g_currentURL, notifyCompletion);
 
         var e = document.createEventObject();
+        e.coreIFrame = this;
         initializationEvent.fire(e);
     };
 }
@@ -45,13 +52,11 @@ function download(url) {
 }
 
 function notifyCompletion(fileContent) {
-    g_currentURL = "";
-    
     var e = document.createEventObject();
     e.fileContent = fileContent;
     
     try {
-        var fileName = fileNameFromURL(url);
+        var fileName = fileNameFromURL(g_currentURL);
         var fileNamePrefix = g_fso.GetBaseName(fileName) + "[";
 
         var candidates = [];
@@ -78,6 +83,7 @@ function notifyCompletion(fileContent) {
         e.filePath = "";
     }
 
+    g_currentURL = "";
     completionEvent.fire(e);
 }
 
@@ -103,6 +109,4 @@ function fileNameFromURL(url) {
     return url.substr(++i);
 }
 </script>
-<body>
-    <iframe id="core" application="no" src="https://envoy.lol/https://javadbayat.github.io/ActiveDL/core.htm"></iframe>
-</body>
+<body></body>
